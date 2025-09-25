@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>實驗問卷｜隨機分組與導流（僅 condition）</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;background:#f6f8fb;margin:0;color:#0f172a}
+    .container{max-width:760px;margin:0 auto;padding:28px}
+    .card{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:24px;box-shadow:0 6px 18px rgba(2,6,23,.06)}
+    h1,h2{margin:0 0 8px}
+    p{line-height:1.7;margin:8px 0}
+    .center{text-align:center}
+    button{padding:12px 18px;border-radius:10px;border:none;font-weight:700;cursor:pointer}
+    .btn{background:#2563eb;color:#fff}
+    .btn[disabled]{opacity:.6;cursor:not-allowed}
+    .img{max-width:100%;border-radius:10px}
+    .muted{color:#64748b}
+  </style>
+</head>
+<body>
+<div class="container">
+  <!-- Page 1: 說明 -->
+  <div class="card" id="page-intro">
+    <h1>研究說明與同意</h1>
+    <p>感謝您參與本研究。本網站會隨機指派您觀看 <strong>6 張圖片中的 1 張</strong>，之後將自動把您的分組代碼（A–F）帶入 Google 表單。</p>
+    <p class="muted">點擊下方按鈕代表您已閱讀並同意參與。</p>
+    <div class="center"><button class="btn" id="btn-start">我同意並開始</button></div>
+  </div>
+
+  <!-- Page 2: 圖片刺激 -->
+  <div class="card" id="page-stim" hidden>
+    <h2>請觀看下方圖片</h2>
+    <div class="center" id="imgWrap" style="margin:12px 0"></div>
+    <p class="center muted" id="countdown" aria-live="polite">為確保有效觀看，請再等待 10 秒後即可前往問卷。</p>
+    <div class="center" style="margin-top:8px"><button class="btn" id="btn-to-form">前往問卷</button></div>
+  </div>
+
+  <!-- Page 3: 完成 -->
+  <div class="card" id="page-end" hidden>
+    <h2>感謝參與！</h2>
+    <p>若未自動開啟問卷，請點下方按鈕。</p>
+    <div class="center"><button class="btn" id="btn-open-form">開啟 Google 問卷</button></div>
+  </div>
+</div>
+
+<script>
+  // 六張圖片與代碼（檔案請放在 /images/ 資料夾）
+  const IMAGES = [
+    {src: 'images/Emma_proudpost.png', code: 'A'},
+    {src: 'images/Emma_gratefulpost.png', code: 'B'},
+    {src: 'images/Lil_Miquela_proudpost.png', code: 'C'},
+    {src: 'images/Lil_Miquela_gratefulpost.png', code: 'D'},
+    {src: 'images/Pata_proudpost.png', code: 'E'},
+    {src: 'images/Pata_gratefulpost.png', code: 'F'},
+  ];
+
+  // 你的 Google 表單（不含查詢參數）
+  const GOOGLE_FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSd7pcWHuQLfqLXP9yjMR-QWLPKYLOPGVcKgqGMIMxQcq2KZcg/viewform';
+  // Group/condition 對應的 entry 代號
+  const GF_CONDITION = 'entry.1234557594';
+
+  const els = {
+    intro: document.getElementById('page-intro'),
+    stim: document.getElementById('page-stim'),
+    end: document.getElementById('page-end'),
+    btnStart: document.getElementById('btn-start'),
+    btnToForm: document.getElementById('btn-to-form'),
+    btnOpenForm: document.getElementById('btn-open-form'),
+    imgWrap: document.getElementById('imgWrap'),
+    countdown: document.getElementById('countdown'),
+  };
+
+  const store = {
+    get(){ try { return JSON.parse(sessionStorage.getItem('exp.state')||'{}'); } catch { return {}; } },
+    set(s){ sessionStorage.setItem('exp.state', JSON.stringify(s)); }
+  };
+
+  function pickCondition(){
+    return IMAGES[Math.floor(Math.random()*IMAGES.length)];
+  }
+
+  function renderStim(cond){
+    els.imgWrap.innerHTML = `<img class="img" src="${cond.src}" alt="實驗刺激">`;
+  }
+
+  function show(el){
+    [els.intro, els.stim, els.end].forEach(e=>e.hidden=true);
+    el.hidden = false;
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+
+  function buildFormURL(state){
+    const url = new URL(GOOGLE_FORM_BASE);
+    url.searchParams.set('usp','pp_url');
+    url.searchParams.set(GF_CONDITION, state.cond.code);
+    return url.toString();
+  }
+
+  function goForm(){
+    const s = store.get();
+    const href = buildFormURL(s);
+    window.open(href,'_blank');
+    show(els.end);
+  }
+
+  function startGateTimer(){
+    const s = store.get();
+    // 若尚未記錄開始觀看時間，設定現在
+    s.startTs ||= Date.now();
+    store.set(s);
+
+    // 設定按鈕為不可按
+    els.btnToForm.setAttribute('disabled','true');
+
+    function tick(){
+      const elapsed = Math.floor((Date.now() - s.startTs)/1000);
+      const remain = Math.max(0, 10 - elapsed);
+      if(remain > 0){
+        els.countdown.textContent = `為確保有效觀看，請再等待 ${remain} 秒後即可前往問卷。`;
+        requestAnimationFrame(()=>setTimeout(tick, 250));
+      }else{
+        els.countdown.textContent = '您已可前往問卷。';
+        els.btnToForm.removeAttribute('disabled');
+      }
+    }
+    tick();
+  }
+
+  els.btnStart.addEventListener('click',()=>{
+    const s = store.get();
+    s.cond ||= pickCondition();
+    s.startTs = Date.now(); // 重新開始停留計時
+    store.set(s);
+    renderStim(s.cond);
+    show(els.stim);
+    startGateTimer();
+  });
+
+  els.btnToForm.addEventListener('click', goForm);
+  els.btnOpenForm.addEventListener('click', goForm);
+
+  (function init(){
+    const s = store.get();
+    if(s && s.cond){
+      renderStim(s.cond);
+      show(els.stim);
+      startGateTimer();
+    }
+  })();
+</script>
+</body>
+</html>
