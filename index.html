@@ -14,7 +14,7 @@
     button{padding:12px 18px;border-radius:10px;border:none;font-weight:700;cursor:pointer}
     .btn{background:#2563eb;color:#fff}
     .btn[disabled]{opacity:.6;cursor:not-allowed}
-    .img{max-width:100%;border-radius:10px}
+    .img{max-width:100%;border-radius:10px;opacity:0;transition:opacity .25s ease}.img[data-loaded="1"],.img[complete]{opacity:1} #imgWrap{min-height:260px}
     .muted{color:#64748b}
   </style>
 </head>
@@ -24,16 +24,16 @@
   <div class="card" id="page-intro">
     <h1>Influencer Type and CSR Engagement: A Survey on Sustainability Messaging Effectiveness</h1>
     <p>感謝您參與本研究。本網站會隨機指派您觀看 <strong>6 張圖片中的 1 張</strong>，之後將自動把您的分組代碼（A–F）帶入 Google 表單。</p>
-    <p class="muted">I have read the information carefully。</p>
-    <div class="center"><button class="btn" id="btn-start">I have read the information carefully</button></div>
+    <p class="muted">點擊下方按鈕代表您已閱讀並同意參與。</p>
+    <div class="center"><button class="btn" id="btn-start">我同意並開始</button></div>
   </div>
 
   <!-- Page 2: 圖片刺激 -->
   <div class="card" id="page-stim" hidden>
-    <h2>Please review the following images and text,then press the "Fill out the survey" button below.</h2>
+    <h2>請觀看下方圖片</h2>
     <div class="center" id="imgWrap" style="margin:12px 0"></div>
     <p class="center muted" id="countdown" aria-live="polite">為確保有效觀看，請再等待 10 秒後即可前往問卷。</p>
-    <div class="center" style="margin-top:8px"><button class="btn" id="btn-to-form">Fill out the survey</button></div>
+    <div class="center" style="margin-top:8px"><button class="btn" id="btn-to-form">前往問卷</button></div>
   </div>
 
   <!-- Page 3: 完成 -->
@@ -54,6 +54,19 @@
     {src: 'images/Pata_proudpost.png', code: 'E'},
     {src: 'images/Pata_gratefulpost.png', code: 'F'},
   ];
+
+  // 預載功能（按下開始後才預載）
+  const preloadCache = new Map();
+  function preloadAllImages(){
+    if (preloadCache.size) return; // 僅預載一次
+    IMAGES.forEach(item => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.loading = 'eager';
+      img.src = item.src;
+      preloadCache.set(item.src, img);
+    });
+  }
 
   // 你的 Google 表單（不含查詢參數）
   const GOOGLE_FORM_BASE = 'https://docs.google.com/forms/d/e/1FAIpQLSd7pcWHuQLfqLXP9yjMR-QWLPKYLOPGVcKgqGMIMxQcq2KZcg/viewform';
@@ -81,7 +94,32 @@
   }
 
   function renderStim(cond){
-    els.imgWrap.innerHTML = `<img class="img" src="${cond.src}" alt="實驗刺激">`;
+    // 若已預載且完成，直接用快取的影像，顯示會更快
+    const cached = preloadCache.get(cond.src);
+    if (cached && cached.complete){
+      const clone = cached.cloneNode();
+      clone.className = 'img';
+      clone.alt = '實驗刺激';
+      clone.setAttribute('fetchpriority','high');
+      clone.setAttribute('decoding','async');
+      clone.setAttribute('loading','eager');
+      clone.setAttribute('data-loaded','1');
+      els.imgWrap.innerHTML = '';
+      els.imgWrap.appendChild(clone);
+      return;
+    }
+    // 否則一般載入，載入完成後淡入
+    els.imgWrap.innerHTML = '';
+    const img = new Image();
+    img.className = 'img';
+    img.alt = '實驗刺激';
+    img.setAttribute('fetchpriority','high');
+    img.setAttribute('decoding','async');
+    img.setAttribute('loading','eager');
+    img.addEventListener('load',()=>img.setAttribute('data-loaded','1'),{once:true});
+    img.src = cond.src;
+    els.imgWrap.appendChild(img);
+  }" alt="實驗刺激">`;
   }
 
   function show(el){
@@ -128,6 +166,8 @@
   }
 
   els.btnStart.addEventListener('click',()=>{
+    // 先預載六張圖，提升刺激呈現速度（按下開始後才做）
+    preloadAllImages();
     const s = store.get();
     s.cond ||= pickCondition();
     s.startTs = Date.now(); // 重新開始停留計時
@@ -151,3 +191,4 @@
 </script>
 </body>
 </html>
+
